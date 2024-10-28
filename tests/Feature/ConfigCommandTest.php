@@ -1,13 +1,5 @@
 <?php
 
-/** @noinspection AnonymousFunctionStaticInspection */
-/** @noinspection JsonEncodingApiUsageInspection */
-/** @noinspection NullPointerExceptionInspection */
-/** @noinspection PhpUnhandledExceptionInspection */
-/** @noinspection PhpUnused */
-/** @noinspection PhpUnusedAliasInspection */
-/** @noinspection StaticClosureCanBeUsedInspection */
-
 declare(strict_types=1);
 
 /**
@@ -26,9 +18,7 @@ use Symfony\Component\Process\Exception\ProcessFailedException;
 use Symfony\Component\Process\ExecutableFinder;
 
 it('can set config', function (): void {
-    $this->getFunctionMock(class_namespace(ConfigCommand::class), 'file_exists')
-        ->expects($this->atLeastOnce())
-        ->willReturn(false);
+    mockFileExists(false);
 
     $this->artisan(ConfigCommand::class, [
         'action' => 'set',
@@ -55,7 +45,7 @@ it('can set config', function (): void {
     ])->assertFailed();
 })->group(__DIR__, __FILE__);
 
-it('can set/get special config value', function ($value): void {
+it('can set and retrieve special config values', function ($value): void {
     $this->artisan(ConfigCommand::class, [
         'action' => 'set',
         'key' => 'foo.bar',
@@ -72,7 +62,7 @@ it('can set/get special config value', function ($value): void {
     ->group(__DIR__, __FILE__)
     ->with(['null', 'true', 'false', '0.0', '0', json_encode(['foo' => 'bar'], JSON_THROW_ON_ERROR)]);
 
-it('can get config', function (): void {
+it('can get config values', function (): void {
     $this->artisan(ConfigCommand::class, [
         'action' => 'get',
     ])->assertSuccessful();
@@ -88,14 +78,14 @@ it('can get config', function (): void {
     ])->assertSuccessful();
 })->group(__DIR__, __FILE__);
 
-it('can unset config', function (): void {
+it('can unset config values', function (): void {
     $this->artisan(ConfigCommand::class, [
         'action' => 'unset',
         'key' => 'foo.bar',
     ])->assertSuccessful();
 })->group(__DIR__, __FILE__);
 
-it('can reset config', function (): void {
+it('can reset config values', function (): void {
     $this->artisan(ConfigCommand::class, [
         'action' => 'reset',
         'key' => 'foo.bar',
@@ -106,45 +96,35 @@ it('can reset config', function (): void {
     ])->assertSuccessful();
 })->group(__DIR__, __FILE__);
 
-it('can list config', function (): void {
+it('can list config settings', function (): void {
     $this->artisan(ConfigCommand::class, [
         'action' => 'list',
     ])->assertSuccessful();
 })->group(__DIR__, __FILE__);
 
-it('will throw `Command not found` ProcessFailedException for edit config', function (): void {
+it('throws ProcessFailedException for invalid editor in edit config', function (): void {
     $this->artisan(ConfigCommand::class, [
         'action' => 'edit',
         '--editor' => 'no-editor',
     ]);
 })
-    ->skip(windows_os(), 'Github action does not support.')
+    ->skip(windows_os(), 'GitHub Actions does not support this feature on Windows.')
     ->group(__DIR__, __FILE__)
     ->throws(ProcessFailedException::class);
 
-it('will throw another `Command not found` ProcessFailedException for edit config', function (): void {
-    app()->singleton(ExecutableFinder::class, static function () {
-        $mockExecutableFinder = \Mockery::mock(ExecutableFinder::class);
-        $mockExecutableFinder->allows('find')->andReturn('no-editor');
-
-        return $mockExecutableFinder;
-    });
+it('throws ProcessFailedException when editor command is not found', function (): void {
+    mockExecutableFinder('no-editor');
 
     $this->artisan(ConfigCommand::class, [
         'action' => 'edit',
     ]);
 })
-    ->skip(windows_os(), 'Github action does not support.')
+    ->skip(windows_os(), 'GitHub Actions does not support this feature on Windows.')
     ->group(__DIR__, __FILE__)
     ->throws(ProcessFailedException::class);
 
-it('will throw RuntimeException for edit config', function (): void {
-    app()->singleton(ExecutableFinder::class, static function () {
-        $mockExecutableFinder = \Mockery::mock(ExecutableFinder::class);
-        $mockExecutableFinder->allows('find')->andReturnNull();
-
-        return $mockExecutableFinder;
-    });
+it('throws RuntimeException when no editor is available', function (): void {
+    mockExecutableFinder(null);
 
     $this->artisan(ConfigCommand::class, [
         'action' => 'edit',
@@ -153,8 +133,26 @@ it('will throw RuntimeException for edit config', function (): void {
     ->group(__DIR__, __FILE__)
     ->throws(RuntimeException::class, 'Unable to find a default editor or specify the editor.');
 
-it('will throw UnsupportedConfigActionException', function (): void {
+it('throws UnsupportedConfigActionException for unsupported action', function (): void {
     $this->artisan(ConfigCommand::class, [
         'action' => 'foo',
     ]);
-})->group(__DIR__, __FILE__)->throws(UnsupportedConfigActionException::class, 'foo');
+})
+    ->group(__DIR__, __FILE__)
+    ->throws(UnsupportedConfigActionException::class, 'foo');
+
+// Helper Functions
+function mockFileExists(bool $exists): void {
+    $this->getFunctionMock(class_namespace(ConfigCommand::class), 'file_exists')
+        ->expects($this->atLeastOnce())
+        ->willReturn($exists);
+}
+
+function mockExecutableFinder(?string $editor): void {
+    app()->singleton(ExecutableFinder::class, static function () use ($editor) {
+        $mock = \Mockery::mock(ExecutableFinder::class);
+        $mock->allows('find')->andReturn($editor);
+
+        return $mock;
+    });
+}
